@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthContext } from "@/lib/auth";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
 const createSolutionSchema = z.object({
   issueId: z.string().uuid(),
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
         summary: data.summary,
         fixDescription: data.fixDescription,
         codeDiff: data.codeDiff,
-        configChanges: data.configChanges,
+        configChanges: data.configChanges as Prisma.InputJsonValue | undefined,
         commands: data.commands,
         minVersion: data.minVersion,
         maxVersion: data.maxVersion,
