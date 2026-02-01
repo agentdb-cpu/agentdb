@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { SearchBar } from "@/components/search-bar";
+
+export const dynamic = "force-dynamic";
 import { IssueCard } from "@/components/issue-card";
 import { SolutionCard } from "@/components/solution-card";
 import { Badge } from "@/components/badge";
