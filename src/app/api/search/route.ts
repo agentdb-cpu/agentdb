@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
         },
         _count: { select: { solutions: true } },
       },
-      orderBy: { confidenceScore: "desc" },
+      orderBy: { occurrenceCount: "desc" },
       take: 20,
     });
 
