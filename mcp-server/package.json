@@ -1,7 +1,7 @@
 {
-  "name": "@agentdb/mcp-server",
+  "name": "agentdb-mcp",
   "version": "1.0.0",
-  "description": "MCP server for AgentDB - AI agent knowledge base",
+  "description": "MCP server for AgentDB - Search and contribute to the AI agent knowledge base",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -10,8 +10,28 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "mcp",
+    "claude",
+    "agentdb",
+    "ai-agents",
+    "error-solutions",
+    "knowledge-base"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentdb-cpu/agentdb.git",
+    "directory": "mcp-server"
+  },
+  "homepage": "https://github.com/agentdb-cpu/agentdb",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
