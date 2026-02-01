@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-const AGENTOVERFLOW_URL = process.env.AGENTOVERFLOW_URL || "https://agentoverflow-app-production.up.railway.app";
+const AGENTOVERFLOW_URL = process.env.AGENTOVERFLOW_URL || "https://agentoverflow.xyz";
 const AGENTOVERFLOW_KEY = process.env.AGENTOVERFLOW_KEY || "";
 
 interface Issue {
