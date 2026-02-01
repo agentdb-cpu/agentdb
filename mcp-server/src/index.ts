@@ -7,8 +7,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-const AGENTDB_URL = process.env.AGENTDB_URL || "http://localhost:3200";
-const AGENTDB_KEY = process.env.AGENTDB_KEY || "";
+const AGENTOVERFLOW_URL = process.env.AGENTOVERFLOW_URL || "http://localhost:3200";
+const AGENTOVERFLOW_KEY = process.env.AGENTOVERFLOW_KEY || "";
 
 interface Issue {
   id: string;
@@ -38,18 +38,18 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
     ...(options.headers as Record<string, string>),
   };
 
-  if (AGENTDB_KEY) {
-    headers["x-agentdb-key"] = AGENTDB_KEY;
+  if (AGENTOVERFLOW_KEY) {
+    headers["x-agentoverflow-key"] = AGENTOVERFLOW_KEY;
   }
 
-  const response = await fetch(`${AGENTDB_URL}${endpoint}`, {
+  const response = await fetch(`${AGENTOVERFLOW_URL}${endpoint}`, {
     ...options,
     headers,
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`AgentDB API error: ${response.status} - ${error}`);
+    throw new Error(`AgentOverflow API error: ${response.status} - ${error}`);
   }
 
   return response.json();
@@ -57,7 +57,7 @@ async function apiRequest(endpoint: string, options: RequestInit = {}) {
 
 const server = new Server(
   {
-    name: "agentdb",
+    name: "agentoverflow",
     version: "1.0.0",
   },
   {
@@ -73,7 +73,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "search_issues",
-        description: "Search AgentDB for issues matching a query. Use this when encountering an error to find known solutions.",
+        description: "Search AgentOverflow for issues matching a query. Use this when encountering an error to find known solutions.",
         inputSchema: {
           type: "object",
           properties: {
@@ -110,7 +110,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "submit_issue",
-        description: "Submit a new issue to AgentDB when encountering an error that isn't in the database",
+        description: "Submit a new issue to AgentOverflow when encountering an error that isn't in the database",
         inputSchema: {
           type: "object",
           properties: {
@@ -207,7 +207,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "get_stats",
-        description: "Get AgentDB statistics - total issues, solutions, agents, etc.",
+        description: "Get AgentOverflow statistics - total issues, solutions, agents, etc.",
         inputSchema: {
           type: "object",
           properties: {},
@@ -236,7 +236,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content: [
               {
                 type: "text",
-                text: "No matching issues found in AgentDB. Consider submitting this as a new issue using submit_issue.",
+                text: "No matching issues found in AgentOverflow. Consider submitting this as a new issue using submit_issue.",
               },
             ],
           };
@@ -329,7 +329,7 @@ ${topSolution.commands?.length ? `\n**Commands:**\n\`\`\`\n${topSolution.command
           content: [
             {
               type: "text",
-              text: `AgentDB Statistics:
+              text: `AgentOverflow Statistics:
 - Total Issues: ${result.issueCount}
 - Solved Issues: ${result.solvedCount}
 - Solutions: ${result.solutionCount}
@@ -369,7 +369,7 @@ ${topSolution.commands?.length ? `\n**Commands:**\n\`\`\`\n${topSolution.command
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("AgentDB MCP Server running on stdio");
+  console.error("AgentOverflow MCP Server running on stdio");
 }
 
 main().catch(console.error);

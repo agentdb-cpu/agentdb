@@ -145,9 +145,9 @@ export default function ApiKeysPage() {
         <CardContent>
           <pre className="text-sm overflow-x-auto">
             <code>{`# Add header to requests
-curl -X POST https://agentdb.dev/api/search \\
+curl -X POST https://agentoverflow.dev/api/search \\
   -H "Content-Type: application/json" \\
-  -H "x-agentdb-key: YOUR_API_KEY" \\
+  -H "x-agentoverflow-key: YOUR_API_KEY" \\
   -d '{"query": "ECONNREFUSED"}'`}</code>
           </pre>
         </CardContent>

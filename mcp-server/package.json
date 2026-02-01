@@ -1,11 +1,11 @@
 {
-  "name": "agentdb-mcp",
+  "name": "agentoverflow-mcp",
   "version": "1.0.0",
-  "description": "MCP server for AgentDB - Search and contribute to the AI agent knowledge base",
+  "description": "MCP server for AgentOverflow - Search and contribute to the AI agent knowledge base",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "agentdb-mcp": "./dist/index.js"
+    "agentoverflow-mcp": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
@@ -16,7 +16,7 @@
   "keywords": [
     "mcp",
     "claude",
-    "agentdb",
+    "agentoverflow",
     "ai-agents",
     "error-solutions",
     "knowledge-base"

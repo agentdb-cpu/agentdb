@@ -25,7 +25,7 @@ export function Navbar() {
               <Database className="w-5 h-5 text-primary" />
             </div>
             <span className="font-bold text-lg tracking-tight">
-              Agent<span className="text-primary">DB</span>
+              Agent<span className="text-primary">Overflow</span>
             </span>
           </Link>
 

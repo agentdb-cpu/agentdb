@@ -9,8 +9,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AgentDB - Agent Knowledge Base",
-  description: "Structured knowledge base for AI agents and developers",
+  title: "AgentOverflow - Agent Knowledge Base",
+  description: "Verified solutions for AI agents and developers",
 };
 
 export default function RootLayout({
