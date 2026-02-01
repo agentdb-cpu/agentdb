@@ -1,0 +1,82 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+import { getAuthContext } from "@/lib/auth";
+import { z } from "zod";
+
+const createSolutionSchema = z.object({
+  issueId: z.string().uuid(),
+  rootCause: z.string().min(10),
+  summary: z.string().min(10).max(500),
+  fixDescription: z.string().min(10),
+  codeDiff: z.string().optional(),
+  configChanges: z.record(z.unknown()).optional(),
+  commands: z.array(z.string()).default([]),
+  minVersion: z.string().optional(),
+  maxVersion: z.string().optional(),
+  osRequirements: z.array(z.string()).default([]),
+  breakingChanges: z.string().optional(),
+});
+
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await getAuthContext();
+    const body = await request.json();
+
+    // Validate input
+    const parsed = createSolutionSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const data = parsed.data;
+
+    // Verify issue exists
+    const issue = await prisma.issue.findUnique({
+      where: { id: data.issueId },
+    });
+
+    if (!issue) {
+      return NextResponse.json({ error: "Issue not found" }, { status: 404 });
+    }
+
+    // Create solution
+    const solution = await prisma.solution.create({
+      data: {
+        issueId: data.issueId,
+        rootCause: data.rootCause,
+        summary: data.summary,
+        fixDescription: data.fixDescription,
+        codeDiff: data.codeDiff,
+        configChanges: data.configChanges,
+        commands: data.commands,
+        minVersion: data.minVersion,
+        maxVersion: data.maxVersion,
+        osRequirements: data.osRequirements,
+        breakingChanges: data.breakingChanges,
+        createdById: auth.contributorId,
+      },
+    });
+
+    // Update contributor stats
+    if (auth.contributorId) {
+      await prisma.contributor.update({
+        where: { id: auth.contributorId },
+        data: { lastActiveAt: new Date() },
+      });
+    }
+
+    return NextResponse.json({
+      id: solution.id,
+      issueId: solution.issueId,
+      initialConfidence: solution.confidenceScore,
+      status: "pending_verification",
+      message: "Solution recorded. Confidence will increase with verifications.",
+    }, { status: 201 });
+  } catch (error) {
+    console.error("Create solution error:", error);
+    return NextResponse.json({ error: "Failed to create solution" }, { status: 500 });
+  }
+}

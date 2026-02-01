@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Contributor {
+  id              String   @id @default(uuid())
+  type            String   // 'agent' | 'human'
+  name            String
+  email           String?  @unique
+  passwordHash    String?
+
+  // Reputation
+  reputationScore Int      @default(0)
+  trustTier       String   @default("new") // 'new' | 'established' | 'trusted' | 'expert'
+
+  createdAt       DateTime @default(now())
+  lastActiveAt    DateTime @default(now())
+
+  // Relations
+  apiKeys         ApiKey[]
+  issues          Issue[]
+  solutions       Solution[]
+  verifications   Verification[]
+
+  @@map("contributors")
+}
+
+model ApiKey {
+  id            String    @id @default(uuid())
+  contributorId String
+  contributor   Contributor @relation(fields: [contributorId], references: [id], onDelete: Cascade)
+
+  name          String
+  keyPrefix     String
+  keyHash       String    @unique
+
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  revokedAt     DateTime?
+
+  @@map("api_keys")
+}
+
+model Issue {
+  id            String   @id @default(uuid())
+  fingerprint   String
+  canonicalId   String?
+  canonical     Issue?   @relation("CanonicalIssue", fields: [canonicalId], references: [id])
+  duplicates    Issue[]  @relation("CanonicalIssue")
+
+  // Problem description
+  title         String
+  description   String?  @db.Text
+  errorType     String?
+  errorMessage  String?  @db.Text
+  errorCode     String?
+  stackTrace    String?  @db.Text
+  logs          String?  @db.Text
+
+  // Context
+  stack         String[] // Tags: solana, anchor, node, python, etc.
+  runtime       String?
+  os            String?
+  dependencies  Json     @default("{}")
+  environment   String?  // local, ci, production
+
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdById     String?
+  createdBy       Contributor? @relation(fields: [createdById], references: [id])
+  occurrenceCount Int      @default(1)
+  lastSeenAt      DateTime @default(now())
+
+  // Status
+  status        String   @default("open") // open, solved, stale
+
+  // Relations
+  solutions     Solution[]
+  tags          IssueTag[]
+  relatedFrom   IssueRelation[] @relation("FromIssue")
+  relatedTo     IssueRelation[] @relation("ToIssue")
+
+  @@index([fingerprint])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("issues")
+}
+
+model Solution {
+  id            String   @id @default(uuid())
+  issueId       String
+  issue         Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  // Cause-fix mapping
+  rootCause     String   @db.Text
+  summary       String
+  fixDescription String  @db.Text
+  codeDiff      String?  @db.Text
+  configChanges Json?
+  commands      String[]
+
+  // Constraints
+  minVersion    String?
+  maxVersion    String?
+  osRequirements String[]
+  breakingChanges String?
+
+  // Confidence scoring
+  confidenceScore    Float    @default(0.3)
+  verificationCount  Int      @default(0)
+  successCount       Int      @default(0)
+  failureCount       Int      @default(0)
+  lastVerifiedAt     DateTime?
+  decayFactor        Float    @default(1.0)
+
+  // Metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdById   String?
+  createdBy     Contributor? @relation(fields: [createdById], references: [id])
+
+  supersededById String?
+  supersededBy   Solution? @relation("Supersedes", fields: [supersededById], references: [id])
+  supersedes     Solution[] @relation("Supersedes")
+
+  // Relations
+  verifications Verification[]
+
+  @@index([issueId])
+  @@index([confidenceScore(sort: Desc)])
+  @@map("solutions")
+}
+
+model Verification {
+  id          String   @id @default(uuid())
+  solutionId  String
+  solution    Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+
+  // Result
+  outcome     String   // success, failure, partial
+
+  // Context
+  runtime     String?
+  os          String?
+  dependencies Json    @default("{}")
+
+  // Evidence
+  beforeState String?  @db.Text
+  afterState  String?  @db.Text
+  notes       String?
+
+  // Metadata
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   Contributor? @relation(fields: [createdById], references: [id])
+
+  // Impact
+  confidenceDelta Float @default(0)
+  wasCorroborated Boolean?
+  wasContradicted Boolean?
+
+  @@index([solutionId])
+  @@map("verifications")
+}
+
+model Tag {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  color       String   @default("#666")
+  category    String?  // stack, tool, platform
+
+  issues      IssueTag[]
+
+  @@map("tags")
+}
+
+model IssueTag {
+  issueId String
+  issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  tagId   String
+  tag     Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, tagId])
+  @@map("issue_tags")
+}
+
+model IssueRelation {
+  fromId     String
+  from       Issue  @relation("FromIssue", fields: [fromId], references: [id], onDelete: Cascade)
+  toId       String
+  to         Issue  @relation("ToIssue", fields: [toId], references: [id], onDelete: Cascade)
+  similarity Float
+
+  @@id([fromId, toId])
+  @@map("issue_relations")
+}
+
+model Signature {
+  id          String   @id @default(uuid())
+  hash        String   @unique
+  normalized  String   @db.Text
+  issueCount  Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  @@map("signatures")
+}
