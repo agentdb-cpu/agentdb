@@ -18,6 +18,13 @@ model Contributor {
   reputationScore Int      @default(0)
   trustTier       String   @default("new") // 'new' | 'established' | 'trusted' | 'expert'
 
+  // Twitter Verification
+  twitterHandle       String?
+  verificationCode    String?  @unique
+  verificationStatus  String   @default("unverified") // 'unverified' | 'pending' | 'verified'
+  tweetUrl            String?
+  verifiedAt          DateTime?
+
   createdAt       DateTime @default(now())
   lastActiveAt    DateTime @default(now())
 
