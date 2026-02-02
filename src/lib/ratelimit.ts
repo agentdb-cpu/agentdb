@@ -12,12 +12,49 @@ export const RATE_LIMITS = {
   SOLUTION_COOLDOWN: 30,     // 30 seconds between solutions
   VERIFICATION_COOLDOWN: 10, // 10 seconds between verifications
 
+  // Claim cooldowns
+  CLAIM_REQUEST_COOLDOWN: 300, // 5 minutes between verification code requests
+  CLAIM_SUBMIT_COOLDOWN: 60,   // 1 minute between tweet submissions
+
   // Global rate limits per IP (per minute)
   REQUESTS_PER_MINUTE: 60,
 } as const;
 
 // In-memory store for IP rate limiting (resets on restart)
+// Note: For production, consider using Redis or database
 const ipRequestCounts = new Map<string, { count: number; resetAt: number }>();
+
+// Claim rate limiting (per IP)
+const claimRequestLimits = new Map<string, { count: number; resetAt: number; lastRequest: number }>();
+const claimSubmitLimits = new Map<string, { count: number; resetAt: number; lastSubmit: number }>();
+
+const CLAIM_REQUESTS_PER_HOUR = 5;
+const CLAIM_SUBMITS_PER_HOUR = 10;
+
+/**
+ * Extract real IP address from request headers
+ * Handles various proxy configurations
+ */
+export function extractRealIp(request: { headers: { get: (name: string) => string | null } }): string {
+  // Try various headers in order of preference
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    // Take the first IP (original client)
+    return forwardedFor.split(",")[0].trim();
+  }
+
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) {
+    return realIp.trim();
+  }
+
+  const cfConnectingIp = request.headers.get("cf-connecting-ip");
+  if (cfConnectingIp) {
+    return cfConnectingIp.trim();
+  }
+
+  return "unknown";
+}
 
 /**
  * Check if IP is rate limited
@@ -37,6 +74,68 @@ export function checkIpRateLimit(ip: string): { allowed: boolean; retryAfter?: n
   }
 
   record.count++;
+  return { allowed: true };
+}
+
+/**
+ * Check claim request rate limit (verification code requests)
+ */
+export function checkClaimRequestLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = claimRequestLimits.get(ip);
+
+  if (!record || now > record.resetAt) {
+    claimRequestLimits.set(ip, { count: 1, resetAt: now + 3600000, lastRequest: now });
+    return { allowed: true };
+  }
+
+  // Check cooldown
+  const timeSinceLastRequest = (now - record.lastRequest) / 1000;
+  if (timeSinceLastRequest < RATE_LIMITS.CLAIM_REQUEST_COOLDOWN) {
+    return {
+      allowed: false,
+      retryAfter: Math.ceil(RATE_LIMITS.CLAIM_REQUEST_COOLDOWN - timeSinceLastRequest),
+    };
+  }
+
+  // Check hourly limit
+  if (record.count >= CLAIM_REQUESTS_PER_HOUR) {
+    return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
+  }
+
+  record.count++;
+  record.lastRequest = now;
+  return { allowed: true };
+}
+
+/**
+ * Check claim submit rate limit (tweet URL submissions)
+ */
+export function checkClaimSubmitLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = claimSubmitLimits.get(ip);
+
+  if (!record || now > record.resetAt) {
+    claimSubmitLimits.set(ip, { count: 1, resetAt: now + 3600000, lastSubmit: now });
+    return { allowed: true };
+  }
+
+  // Check cooldown
+  const timeSinceLastSubmit = (now - record.lastSubmit) / 1000;
+  if (timeSinceLastSubmit < RATE_LIMITS.CLAIM_SUBMIT_COOLDOWN) {
+    return {
+      allowed: false,
+      retryAfter: Math.ceil(RATE_LIMITS.CLAIM_SUBMIT_COOLDOWN - timeSinceLastSubmit),
+    };
+  }
+
+  // Check hourly limit
+  if (record.count >= CLAIM_SUBMITS_PER_HOUR) {
+    return { allowed: false, retryAfter: Math.ceil((record.resetAt - now) / 1000) };
+  }
+
+  record.count++;
+  record.lastSubmit = now;
   return { allowed: true };
 }
 

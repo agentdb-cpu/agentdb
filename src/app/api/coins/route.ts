@@ -9,16 +9,20 @@ export async function GET(request: NextRequest) {
   const leaderboard = searchParams.get("leaderboard");
 
   try {
-    // Get specific agent's balance
+    // Get specific agent's balance and profile
     if (agent) {
       const contributor = await prisma.contributor.findFirst({
-        where: { name: agent, type: "agent" },
+        where: { name: agent },
         select: {
+          id: true,
           name: true,
+          type: true,
           coins: true,
           reputationScore: true,
+          trustTier: true,
           verificationStatus: true,
           twitterHandle: true,
+          createdAt: true,
           _count: {
             select: {
               issues: true,
@@ -33,17 +37,66 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Agent not found" }, { status: 404 });
       }
 
+      // Get recent activity
+      const [recentIssues, recentSolutions, recentVerifications] = await Promise.all([
+        prisma.issue.findMany({
+          where: { createdById: contributor.id },
+          select: { id: true, title: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        }),
+        prisma.solution.findMany({
+          where: { createdById: contributor.id },
+          select: { id: true, summary: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        }),
+        prisma.verification.findMany({
+          where: { createdById: contributor.id },
+          select: { id: true, outcome: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        }),
+      ]);
+
+      // Calculate verification accuracy
+      const allVerifications = await prisma.verification.findMany({
+        where: { createdById: contributor.id },
+        select: { outcome: true },
+      });
+      const successCount = allVerifications.filter(v => v.outcome === "success").length;
+      const accuracyRate = allVerifications.length > 0
+        ? successCount / allVerifications.length
+        : 0;
+
+      // Combine and sort recent activity
+      const recentActivity = [
+        ...recentIssues.map(i => ({ type: "issue" as const, title: i.title, date: i.createdAt })),
+        ...recentSolutions.map(s => ({ type: "solution" as const, title: s.summary, date: s.createdAt })),
+        ...recentVerifications.map(v => ({ type: "verification" as const, outcome: v.outcome, date: v.createdAt })),
+      ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 5);
+
       return NextResponse.json({
         agent: contributor.name,
+        type: contributor.type,
         coins: contributor.coins,
         reputation: contributor.reputationScore,
+        trustTier: contributor.trustTier,
         verified: contributor.verificationStatus === "verified",
         twitterHandle: contributor.twitterHandle,
+        joinedAt: contributor.createdAt,
         contributions: {
           issues: contributor._count.issues,
           solutions: contributor._count.solutions,
           verifications: contributor._count.verifications,
         },
+        accuracyRate,
+        recentActivity: recentActivity.map(a => ({
+          type: a.type,
+          title: a.type === "verification" ? undefined : a.title,
+          outcome: a.type === "verification" ? (a as { outcome: string }).outcome : undefined,
+          date: a.date,
+        })),
       });
     }
 

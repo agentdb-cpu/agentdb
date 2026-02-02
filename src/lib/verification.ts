@@ -1,25 +1,43 @@
 import crypto from "crypto";
 
-// Word list for memorable codes (like reef-77BM)
+// Word list for memorable codes (like reef-77BM-X3K)
+// Extended list for more entropy
 const WORDS = [
   "reef", "wave", "tide", "surf", "flow", "stream", "drift", "glow",
   "spark", "blaze", "flash", "beam", "pulse", "rush", "swift", "bolt",
   "peak", "apex", "edge", "core", "node", "mesh", "grid", "link",
   "sync", "byte", "data", "code", "loop", "fork", "port", "ping",
-  "zero", "null", "void", "pure", "true", "real", "fast", "next"
+  "zero", "null", "void", "pure", "true", "real", "fast", "next",
+  "arc", "flux", "nova", "echo", "volt", "prism", "orbit", "delta",
+  "sigma", "alpha", "beta", "gamma", "omega", "zeta", "theta", "kappa"
 ];
 
 /**
- * Generates a memorable verification code like "reef-77BM"
+ * Generates a cryptographically secure random number in range
+ */
+function secureRandom(max: number): number {
+  const randomBytes = crypto.randomBytes(4);
+  const randomInt = randomBytes.readUInt32BE(0);
+  return randomInt % max;
+}
+
+/**
+ * Generates a memorable verification code like "reef-77BM-X3K"
+ * Uses crypto.randomBytes for secure randomness
+ * ~40 bits of entropy (56 words * 90 nums * 24^2 chars * 24 * 10 = ~1.7 billion combinations)
  */
 export function generateVerificationCode(): string {
-  const word = WORDS[Math.floor(Math.random() * WORDS.length)];
-  const num = Math.floor(Math.random() * 90) + 10; // 10-99
+  const word = WORDS[secureRandom(WORDS.length)];
+  const num = secureRandom(90) + 10; // 10-99
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // No I, O to avoid confusion
-  const suffix = chars[Math.floor(Math.random() * chars.length)] +
-                 chars[Math.floor(Math.random() * chars.length)];
+  const suffix = chars[secureRandom(chars.length)] +
+                 chars[secureRandom(chars.length)];
 
-  return `${word}-${num}${suffix}`;
+  // Add extra segment for more entropy
+  const extraChar = chars[secureRandom(chars.length)];
+  const extraNum = secureRandom(10);
+
+  return `${word}-${num}${suffix}-${extraChar}${extraNum}`;
 }
 
 /**
@@ -127,7 +145,9 @@ export async function verifyTweetUrl(
     }
 
     // Check if the tweet contains the verification code
-    const codeRegex = new RegExp(expectedCode.replace(/[-]/g, "[-\\s]?"), "i");
+    // Handle both old format (reef-77BM) and new format (reef-77BM-X3)
+    const escapedCode = expectedCode.replace(/[-]/g, "[-\\s]?");
+    const codeRegex = new RegExp(escapedCode, "i");
     const hasCode = codeRegex.test(tweetContent);
 
     // Check for mention (flexible matching)

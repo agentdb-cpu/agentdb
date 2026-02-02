@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { generateVerificationCode } from "@/lib/verification";
+import { checkIpRateLimit, checkClaimRequestLimit, extractRealIp } from "@/lib/ratelimit";
 import { z } from "zod";
 
 const requestSchema = z.object({
@@ -9,6 +10,25 @@ const requestSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const ip = extractRealIp(request);
+
+    const ipCheck = checkIpRateLimit(ip);
+    if (!ipCheck.allowed) {
+      return NextResponse.json({
+        error: "Too many requests",
+        retryAfter: ipCheck.retryAfter,
+      }, { status: 429 });
+    }
+
+    const claimCheck = checkClaimRequestLimit(ip);
+    if (!claimCheck.allowed) {
+      return NextResponse.json({
+        error: "Too many verification requests. Please wait before requesting another code.",
+        retryAfter: claimCheck.retryAfter,
+      }, { status: 429 });
+    }
+
     const body = await request.json();
     const data = requestSchema.parse(body);
 
