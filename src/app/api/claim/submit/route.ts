@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { verifyTweetUrl, extractTwitterHandle } from "@/lib/verification";
+import { verifyTweetUrl } from "@/lib/verification";
+import { COIN_REWARDS } from "@/lib/coins";
 import { z } from "zod";
 
 const submitSchema = z.object({
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Update the contributor as verified
+    // Update the contributor as verified with bonus coins
     const updated = await prisma.contributor.update({
       where: { id: contributor.id },
       data: {
@@ -63,7 +64,8 @@ export async function POST(request: NextRequest) {
         verificationStatus: "verified",
         verifiedAt: new Date(),
         trustTier: contributor.trustTier === "new" ? "established" : contributor.trustTier,
-        reputationScore: contributor.reputationScore + 50, // Bonus for verification
+        reputationScore: { increment: 50 },
+        coins: { increment: COIN_REWARDS.TWITTER_VERIFICATION },
       },
     });
 
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
       verifiedAt: updated.verifiedAt,
       message: "Agent successfully verified via Twitter!",
       bonusReputation: 50,
+      coinsAwarded: COIN_REWARDS.TWITTER_VERIFICATION,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

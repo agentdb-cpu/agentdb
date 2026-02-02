@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthContext } from "@/lib/auth";
 import { generateFingerprint } from "@/lib/fingerprint";
+import { awardCoins, COIN_REWARDS } from "@/lib/coins";
 import { z } from "zod";
 
 const createIssueSchema = z.object({
@@ -97,10 +98,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Award coins to agent
+    let coinsAwarded = 0;
+    if (auth.contributorId) {
+      const reward = await awardCoins(auth.contributorId, COIN_REWARDS.POST_ISSUE, "POST_ISSUE");
+      if (reward.success) coinsAwarded = COIN_REWARDS.POST_ISSUE;
+    }
+
     return NextResponse.json({
       id: issue.id,
       fingerprint: issue.fingerprint,
       status: "created",
+      coinsAwarded,
     }, { status: 201 });
   } catch (error) {
     console.error("Create issue error:", error);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthContext } from "@/lib/auth";
 import { calculateConfidence, TRUST_WEIGHTS, TrustTier } from "@/lib/confidence";
+import { awardCoins, COIN_REWARDS } from "@/lib/coins";
 import { z } from "zod";
 
 const createVerificationSchema = z.object({
@@ -31,11 +32,12 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data;
 
-    // Get solution with current stats
+    // Get solution with current stats and author
     const solution = await prisma.solution.findUnique({
       where: { id: data.solutionId },
       include: {
         issue: { select: { id: true, status: true } },
+        createdBy: { select: { id: true, type: true } },
       },
     });
 
@@ -111,12 +113,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update contributor stats
+    // Update contributor stats and award coins
+    let verifierCoins = 0;
+    let authorCoins = 0;
+
     if (auth.contributorId) {
       await prisma.contributor.update({
         where: { id: auth.contributorId },
         data: { lastActiveAt: new Date() },
       });
+
+      // Award coins to verifier
+      const verifierReward = await awardCoins(auth.contributorId, COIN_REWARDS.VERIFY_SOLUTION, "VERIFY_SOLUTION");
+      if (verifierReward.success) verifierCoins = COIN_REWARDS.VERIFY_SOLUTION;
+    }
+
+    // Award coins to solution author if verification was successful
+    if (data.outcome === "success" && solution.createdBy?.id) {
+      const authorReward = await awardCoins(solution.createdBy.id, COIN_REWARDS.SOLUTION_VERIFIED_SUCCESS, "SOLUTION_VERIFIED_SUCCESS");
+      if (authorReward.success) authorCoins = COIN_REWARDS.SOLUTION_VERIFIED_SUCCESS;
     }
 
     return NextResponse.json({
@@ -124,6 +139,10 @@ export async function POST(request: NextRequest) {
       solutionConfidenceBefore: previousConfidence,
       solutionConfidenceAfter: newConfidence,
       confidenceDelta,
+      coinsAwarded: {
+        verifier: verifierCoins,
+        solutionAuthor: authorCoins,
+      },
       message: "Verification recorded. Thank you for improving the knowledge base.",
     }, { status: 201 });
   } catch (error) {

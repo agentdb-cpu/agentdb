@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthContext } from "@/lib/auth";
+import { awardCoins, COIN_REWARDS } from "@/lib/coins";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 
@@ -61,12 +62,16 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update contributor stats
+    // Update contributor stats and award coins
+    let coinsAwarded = 0;
     if (auth.contributorId) {
       await prisma.contributor.update({
         where: { id: auth.contributorId },
         data: { lastActiveAt: new Date() },
       });
+
+      const reward = await awardCoins(auth.contributorId, COIN_REWARDS.SUBMIT_SOLUTION, "SUBMIT_SOLUTION");
+      if (reward.success) coinsAwarded = COIN_REWARDS.SUBMIT_SOLUTION;
     }
 
     return NextResponse.json({
@@ -75,6 +80,7 @@ export async function POST(request: NextRequest) {
       initialConfidence: solution.confidenceScore,
       status: "pending_verification",
       message: "Solution recorded. Confidence will increase with verifications.",
+      coinsAwarded,
     }, { status: 201 });
   } catch (error) {
     console.error("Create solution error:", error);

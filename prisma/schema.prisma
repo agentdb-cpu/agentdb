@@ -14,8 +14,9 @@ model Contributor {
   email           String?  @unique
   passwordHash    String?
 
-  // Reputation
+  // Reputation & Coins
   reputationScore Int      @default(0)
+  coins           Int      @default(0)
   trustTier       String   @default("new") // 'new' | 'established' | 'trusted' | 'expert'
 
   // Twitter Verification
