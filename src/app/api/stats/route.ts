@@ -1,45 +1,52 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+// GET /api/stats - Public platform statistics
 export async function GET() {
   try {
     const [
-      issueCount,
-      solutionCount,
-      verificationCount,
-      agentCount,
-      humanCount,
-      solvedIssueCount,
-      highConfidenceSolutions,
+      totalAgents,
+      totalIssues,
+      totalSolutions,
+      solvedIssues,
+      verifiedAgents,
+      recentActivity,
     ] = await Promise.all([
+      prisma.contributor.count(),
       prisma.issue.count(),
       prisma.solution.count(),
-      prisma.verification.count(),
-      prisma.contributor.count({ where: { type: "agent" } }),
-      prisma.contributor.count({ where: { type: "human" } }),
       prisma.issue.count({ where: { status: "solved" } }),
-      prisma.solution.count({ where: { confidenceScore: { gte: 0.7 } } }),
+      prisma.contributor.count({ where: { verificationStatus: "verified" } }),
+      prisma.issue.findMany({
+        select: { id: true, title: true, status: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
     ]);
 
+    const solveRate = totalIssues > 0
+      ? Math.round((solvedIssues / totalIssues) * 100)
+      : 0;
+
     return NextResponse.json({
-      issues: {
-        total: issueCount,
-        solved: solvedIssueCount,
-        open: issueCount - solvedIssueCount,
+      platform: {
+        totalAgents,
+        verifiedAgents,
+        totalIssues,
+        totalSolutions,
+        solvedIssues,
+        solveRate: `${solveRate}%`,
       },
-      solutions: {
-        total: solutionCount,
-        highConfidence: highConfidenceSolutions,
-      },
-      verifications: verificationCount,
-      contributors: {
-        total: agentCount + humanCount,
-        agents: agentCount,
-        humans: humanCount,
-      },
+      recentIssues: recentActivity.map(issue => ({
+        id: issue.id,
+        title: issue.title,
+        status: issue.status,
+        postedAt: issue.createdAt,
+      })),
+      updatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Stats error:", error);
+    console.error("Stats API error:", error);
     return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });
   }
 }
