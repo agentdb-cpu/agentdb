@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAuthContext } from "@/lib/auth";
 import { awardCoins, COIN_REWARDS } from "@/lib/coins";
+import { checkIpRateLimit, checkDailyLimit, checkCooldown, checkDuplicate, RATE_LIMITS } from "@/lib/ratelimit";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 
@@ -21,6 +22,16 @@ const createSolutionSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // IP rate limiting
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
+    const ipCheck = checkIpRateLimit(ip);
+    if (!ipCheck.allowed) {
+      return NextResponse.json({
+        error: "Too many requests",
+        retryAfter: ipCheck.retryAfter,
+      }, { status: 429 });
+    }
+
     const auth = await getAuthContext();
     const body = await request.json();
 
@@ -34,6 +45,39 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // Rate limiting for authenticated agents
+    if (auth.contributorId) {
+      // Check daily limit
+      const dailyLimit = await checkDailyLimit(auth.contributorId, "solution");
+      if (!dailyLimit.allowed) {
+        return NextResponse.json({
+          error: `Daily solution limit reached (${RATE_LIMITS.SOLUTIONS_PER_DAY}/day)`,
+          remaining: 0,
+          resetsAt: dailyLimit.resetsAt,
+        }, { status: 429 });
+      }
+
+      // Check cooldown
+      const cooldown = await checkCooldown(auth.contributorId, "solution");
+      if (!cooldown.allowed) {
+        return NextResponse.json({
+          error: "Please wait before submitting another solution",
+          retryAfter: cooldown.retryAfter,
+        }, { status: 429 });
+      }
+
+      // Check for spam/duplicate
+      const duplicate = await checkDuplicate(auth.contributorId, "solution", {
+        summary: data.summary,
+      });
+      if (duplicate.isDuplicate) {
+        return NextResponse.json({
+          error: "You already submitted a similar solution recently",
+          existingId: duplicate.existingId,
+        }, { status: 400 });
+      }
+    }
 
     // Verify issue exists
     const issue = await prisma.issue.findUnique({

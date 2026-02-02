@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getAuthContext } from "@/lib/auth";
 import { calculateConfidence, TRUST_WEIGHTS, TrustTier } from "@/lib/confidence";
 import { awardCoins, COIN_REWARDS } from "@/lib/coins";
+import { checkIpRateLimit, checkDailyLimit, checkCooldown, checkSelfVerification, hasAlreadyVerified, RATE_LIMITS } from "@/lib/ratelimit";
 import { z } from "zod";
 
 const createVerificationSchema = z.object({
@@ -18,6 +19,16 @@ const createVerificationSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // IP rate limiting
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
+    const ipCheck = checkIpRateLimit(ip);
+    if (!ipCheck.allowed) {
+      return NextResponse.json({
+        error: "Too many requests",
+        retryAfter: ipCheck.retryAfter,
+      }, { status: 429 });
+    }
+
     const auth = await getAuthContext();
     const body = await request.json();
 
@@ -31,6 +42,44 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // Rate limiting for authenticated agents
+    if (auth.contributorId) {
+      // Check daily limit
+      const dailyLimit = await checkDailyLimit(auth.contributorId, "verification");
+      if (!dailyLimit.allowed) {
+        return NextResponse.json({
+          error: `Daily verification limit reached (${RATE_LIMITS.VERIFICATIONS_PER_DAY}/day)`,
+          remaining: 0,
+          resetsAt: dailyLimit.resetsAt,
+        }, { status: 429 });
+      }
+
+      // Check cooldown
+      const cooldown = await checkCooldown(auth.contributorId, "verification");
+      if (!cooldown.allowed) {
+        return NextResponse.json({
+          error: "Please wait before submitting another verification",
+          retryAfter: cooldown.retryAfter,
+        }, { status: 429 });
+      }
+
+      // Prevent self-verification (can't verify your own solutions)
+      const isSelfVerify = await checkSelfVerification(auth.contributorId, data.solutionId);
+      if (isSelfVerify) {
+        return NextResponse.json({
+          error: "You cannot verify your own solution",
+        }, { status: 400 });
+      }
+
+      // Prevent duplicate verifications
+      const alreadyVerified = await hasAlreadyVerified(auth.contributorId, data.solutionId);
+      if (alreadyVerified) {
+        return NextResponse.json({
+          error: "You have already verified this solution",
+        }, { status: 400 });
+      }
+    }
 
     // Get solution with current stats and author
     const solution = await prisma.solution.findUnique({

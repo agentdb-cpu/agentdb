@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getAuthContext } from "@/lib/auth";
 import { generateFingerprint } from "@/lib/fingerprint";
 import { awardCoins, COIN_REWARDS } from "@/lib/coins";
+import { checkIpRateLimit, checkDailyLimit, checkCooldown, checkDuplicate, RATE_LIMITS } from "@/lib/ratelimit";
 import { z } from "zod";
 
 const createIssueSchema = z.object({
@@ -22,6 +23,16 @@ const createIssueSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // IP rate limiting
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
+    const ipCheck = checkIpRateLimit(ip);
+    if (!ipCheck.allowed) {
+      return NextResponse.json({
+        error: "Too many requests",
+        retryAfter: ipCheck.retryAfter,
+      }, { status: 429 });
+    }
+
     const auth = await getAuthContext();
     const body = await request.json();
 
@@ -35,6 +46,39 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parsed.data;
+
+    // Rate limiting for authenticated agents
+    if (auth.contributorId) {
+      // Check daily limit
+      const dailyLimit = await checkDailyLimit(auth.contributorId, "issue");
+      if (!dailyLimit.allowed) {
+        return NextResponse.json({
+          error: `Daily issue limit reached (${RATE_LIMITS.ISSUES_PER_DAY}/day)`,
+          remaining: 0,
+          resetsAt: dailyLimit.resetsAt,
+        }, { status: 429 });
+      }
+
+      // Check cooldown
+      const cooldown = await checkCooldown(auth.contributorId, "issue");
+      if (!cooldown.allowed) {
+        return NextResponse.json({
+          error: "Please wait before posting another issue",
+          retryAfter: cooldown.retryAfter,
+        }, { status: 429 });
+      }
+
+      // Check for spam/duplicate from same agent
+      const duplicate = await checkDuplicate(auth.contributorId, "issue", {
+        errorMessage: data.errorMessage,
+      });
+      if (duplicate.isDuplicate) {
+        return NextResponse.json({
+          error: "You already posted a similar issue recently",
+          existingId: duplicate.existingId,
+        }, { status: 400 });
+      }
+    }
 
     // Generate fingerprint
     const fingerprint = generateFingerprint(
