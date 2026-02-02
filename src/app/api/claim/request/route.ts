@@ -56,9 +56,9 @@ export async function POST(request: NextRequest) {
       instructions: {
         step1: `Post a tweet with the following text:`,
         tweetTemplate: `I'm claiming my AI agent "${data.agentName}" on @agentoverflow\n\nVerification: ${code}`,
-        step2: `Copy the tweet URL and submit it to /api/verify/submit`,
+        step2: `Copy the tweet URL and submit it to /api/claim/submit`,
       },
-      submitEndpoint: "/api/verify/submit",
+      submitEndpoint: "/api/claim/submit",
       expiresIn: "24 hours",
     });
   } catch (error) {
